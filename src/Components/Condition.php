@@ -53,12 +53,24 @@ class Condition extends Component
         'XOR' => 1,
     );
 
+    public static $OPERATORS_LOGICAL = array(
+        '<>' => 1,
+        '!=' => 1,
+        '<=' => 1,
+        '<' => 1,
+        '=' => 1,
+        '>' => 1,
+        '>=' => 1,
+    );
+
     /**
      * Identifiers recognized.
      *
      * @var array
      */
     public $identifiers = array();
+
+    public $keyword = '';
 
     /**
      * Whether this component is an operator.
@@ -104,6 +116,8 @@ class Condition extends Component
          */
         $brackets = 0;
 
+        $traces[] = &$ret;
+
         /**
          * Whether there was a `BETWEEN` keyword before or not.
          *
@@ -114,6 +128,7 @@ class Condition extends Component
          * @var bool
          */
         $betweenBefore = false;
+        $matchIn = false;   //match when case
 
         for (; $list->idx < $list->count; ++$list->idx) {
             /**
@@ -163,36 +178,56 @@ class Condition extends Component
                 }
             }
 
-            if (($token->type === Token::TYPE_KEYWORD)
-                && ($token->flags & Token::FLAG_KEYWORD_RESERVED)
-                && !($token->flags & Token::FLAG_KEYWORD_FUNCTION)
-            ) {
+            if ($token->type === Token::TYPE_KEYWORD) {
                 if ($token->value === 'BETWEEN') {
                     $betweenBefore = true;
                 }
                 if (($brackets === 0) && (empty(static::$ALLOWED_KEYWORDS[$token->value]))) {
                     break;
                 }
+
+                if (in_array($token->keyword, array('IN', 'NOT IN'))) {
+                    $matchIn = true;
+                }
+
+                $expr->keyword = $token->value;
             }
 
-            if ($token->type === Token::TYPE_OPERATOR) {
+            if ($token->type === Token::TYPE_OPERATOR && in_array($token->value, array('(', ')'))) {
+                if ($matchIn) {
+                    if ($token->value === ')') {
+                        $matchIn = false;
+                    }
+                    continue;
+                }
+
                 if ($token->value === '(') {
                     ++$brackets;
+                    $ret[] = array();
+                    $traces[] = &$ret;
+                    $ret = &$ret[count($ret) - 1];
                 } elseif ($token->value === ')') {
-                    if ($brackets == 0) {
-                        break;
+                    if (!empty($expr->expr)) {
+                        $ret[] = $expr;
+                        $expr = new self();
                     }
                     --$brackets;
+                    array_pop($traces);
+                    $ret = &$traces[count($traces) - 1];
                 }
+                continue;
+            }
+
+            if ($token->type === Token::TYPE_OPERATOR && isset(static::$OPERATORS_LOGICAL[$token->value])) {
+                $expr->isOperator = true;
+                $expr->keyword = $token->value;
             }
 
             $expr->expr .= $token->token;
-            if (($token->type === Token::TYPE_NONE)
-                || (($token->type === Token::TYPE_KEYWORD)
-                && (!($token->flags & Token::FLAG_KEYWORD_RESERVED)))
-                || ($token->type === Token::TYPE_STRING)
-                || ($token->type === Token::TYPE_SYMBOL)
-            ) {
+            $allowIdentifiersTypes = array(
+                Token::TYPE_SYMBOL, Token::TYPE_NONE, Token::TYPE_STRING, Token::TYPE_NUMBER
+            );
+            if (in_array($token->type, $allowIdentifiersTypes)) {
                 if (!in_array($token->value, $expr->identifiers)) {
                     $expr->identifiers[] = $token->value;
                 }

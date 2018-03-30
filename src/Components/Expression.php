@@ -248,18 +248,19 @@ class Expression extends Component
                         }
                         $alias = true;
                         continue;
-                    } elseif ($token->keyword === 'CASE') {
-                        // For a use of CASE like
-                        // 'SELECT a = CASE .... END, b=1, `id`, ... FROM ...'
-                        $tempCaseExpr = CaseExpression::parse($parser, $list);
-                        $ret->expr .= CaseExpression::build($tempCaseExpr);
-                        $isExpr = true;
-                        continue;
                     }
                     $isExpr = true;
                 } elseif ($brackets === 0 && strlen($ret->expr) > 0 && !$alias) {
                     /* End of expression */
                     break;
+                } elseif ($token->keyword === 'CASE') {
+                    // For a use of CASE like
+                    // 'SELECT a = CASE .... END, b=1, `id`, ... FROM ...'
+                    $tempCaseExpr = CaseExpression::parse($parser, $list);
+                    $ret->case = $tempCaseExpr;
+                    $ret->expr .= CaseExpression::build($tempCaseExpr);
+                    $isExpr = true;
+                    continue;
                 }
             }
 
